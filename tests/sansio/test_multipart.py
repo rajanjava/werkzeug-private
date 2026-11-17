@@ -180,3 +180,28 @@ Content-Type: text/plain; charset="UTF-8"
     for event in events:
         result += encoder.send_event(event)
     assert data == result
+
+
+def test_single_byte_chunk_boundary_isolation() -> None:
+    boundary = b"boundary"
+    file_content = b"hello world"
+    data = (
+        b"--boundary\r\n"
+        b'Content-Disposition: form-data; name="file"; filename="test.txt"\r\n'
+        b"Content-Type: text/plain\r\n\r\n"
+        + file_content
+        + b"\r\n--boundary--\r\n"
+    )
+
+    decoder = MultipartDecoder(boundary)
+    collected_data = bytearray()
+    for b in data:
+        decoder.receive_data(bytes([b]))
+        while True:
+            event = decoder.next_event()
+            if isinstance(event, Data):
+                collected_data.extend(event.data)
+            if isinstance(event, NeedData):
+                break
+    assert bytes(collected_data) == file_content
+
