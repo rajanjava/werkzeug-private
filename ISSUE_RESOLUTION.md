@@ -8,7 +8,7 @@
 
 ---
 
-## 2. Root Cause Analysis
+## 2. Problem Description & Root Cause Analysis
 In Werkzeug's Sans-I/O multipart parser, `_last_partial_boundary_index` is called by `_parse_data` to locate a safe cutoff index when incoming data might contain a partial boundary split across chunk buffers:
 ```python
 complete_boundary_index = len(data) - len(b"\r\n--" + self.boundary)
@@ -58,6 +58,11 @@ E       AssertionError: assert b'hello world\r' == b'hello world'
 ```
 
 ---
+
+## Solution Approach
+1. **Analyze Chunked Streaming Window Math:** In `MultipartDecoder._last_partial_boundary_index`, the lookback cutoff only accounted for `len(b"\r\n--" + self.boundary)`, ignoring the extra trailing bytes (`--\r\n` / whitespace, captured by `SEARCH_EXTRA_LENGTH`) required to match a closing boundary when chunks arrive 1 byte at a time.
+2. **Align Lookback Window with Full Boundary Length:** Extended the safe lookback calculation by subtracting `SEARCH_EXTRA_LENGTH`, ensuring any leading `\r` belonging to a partial epilogue boundary stays buffered until the closing bytes arrive instead of being emitted as payload data.
+3. **TDD & Regression Safety:** Added a 1-byte streaming test (`test_single_byte_chunk_boundary_isolation`) reproducing the exact stray `b'\r'` corruption and verified all multipart parser tests pass.
 
 ## 4. Implementation Diff
 ```diff
